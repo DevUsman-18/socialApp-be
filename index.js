@@ -5,12 +5,12 @@ const jwt = require("jsonwebtoken");
 const cors = require('cors')
 
 const app = express()
-const port = 8000
-let connection
+const port = 3306
+
 app.use(express.json())
 app.use(cors())
 
-const errorCheck = function (err, req, res, next) {
+const errorCheck = function (err, req, res) {
     if (err.name === 'UnauthorizedError') {
         res.json({success: false, status: 401, message: 'invalid token'})
     }
@@ -22,12 +22,6 @@ const jwtCheck = expressjwt({
 });
 
 app.get('/profile/:id', async (req,res) => {
-    // const connection = await mysql.createConnection({
-    //     host: "localhost",
-    //     user: "root",
-    //     password: "password"
-    // })
-
     const userInfo = await connection.query("SELECT `id`, `username`, `bio` FROM `users` WHERE `id` = '" + req.params.id + "';")
     const posts = await connection.query("SELECT `posts`.`content` FROM `users` LEFT JOIN `posts` ON `users`.`id` = `posts`.`user-id` WHERE `users`.`id` = '" + req.params.id + "';")
     res.json({posts: posts, userInfo: userInfo})
@@ -35,24 +29,12 @@ app.get('/profile/:id', async (req,res) => {
 
 // foreach over all the following ID's, then put them into profile root to get name.
 app.get('/following/:id', async (req,res) => {
-    const connection = await mysql.createConnection({
-        user: 'root',
-        password: 'password',
-        database: 'social-app'
-    })
     const following = await connection.query("SELECT `user-following`.`following-id` FROM `users` LEFT JOIN `user-following` ON `users`.`id` = `user-following`.`user-id` WHERE `users`.`id` = '" + req.params.id + "';")
     res.json({following: following})
 })
 
 app.post('/signUp', async (req,res) => {
     let {username, bio, email, password} = req.body
-
-    // const connection = await mysql.createConnection({
-    //     user: 'root',
-    //     password: 'password',
-    //     database: 'social-app'
-    // })
-
     const result = await connection.query("INSERT INTO users (`username`, `bio`, `email`, `password`) VALUES ('" + username + "', '" + bio + "', '" + email + "', '" + password + "' );")
 
     if (!result){
@@ -84,20 +66,7 @@ app.post('/login', async (req,res) => {
     }
 
     let {email, password} = req.body
-
-    // const connection = await mysql.createConnection({
-    //     user: 'root',
-    //     password: 'password',
-    //     database: 'social-app'
-    // })
     let user = await connection.execute('SELECT `username`, `bio`, `email`, `password`, `id` FROM `users` WHERE `email` = ? AND `password` = ?;', [email, password])
-
-    // users = JSON.stringify(users)
-    // users = JSON.parse(users)
-
-    // const user = users[0].find((u) => {
-    //     return u.email === email && u.password === password;
-    // });
 
     if (!user) {
         res.json({success: false, message: 'couldn\'t find anyone that matches your credentials'})
@@ -109,21 +78,15 @@ app.post('/login', async (req,res) => {
         username: user.username,
         email: user.email
     }, "mysupersecretkey", {expiresIn: "3 hours"});
-
-    res.json({success: true, message: 'successfully logged in', data: {...user, access_token: token}})
-
+    res.json({data: {...user, access_token: token}, success: true, message: 'successfully logged in'})
 })
 
+//need to check JWTcheck
 app.get('/myProfile', jwtCheck, errorCheck, async (req, res) => {
     let id = req.user.sub
-    // const connection = await mysql.createConnection({
-    //     user: 'root',
-    //     password: 'password',
-    //     database: 'social-app'
-    // })
-    // console.log(req.user)
-    // const userInfo = await connection.query("SELECT `username`, `bio`,`id` FROM `users` WHERE `id` = '" + id + "'")
+    console.log("user id", id)
     const posts = await connection.execute("SELECT `content` FROM `posts` WHERE `user-id` = ? ", [id])
+
     console.log(id, posts[0])
     res.json({success: true, posts: posts})
 
@@ -135,7 +98,8 @@ app.listen(port, async () => {
         user: 'root',
         password: 'password',
         database: 'social-app',
-        port: 8001
+        port: 3306
     });
-    connection.connect()
+    await connection.connect()
+    console.log("connected on port", port)
 })
